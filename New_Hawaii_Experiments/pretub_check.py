@@ -9,9 +9,9 @@ import pandas as pd
 from sklearn.neighbors import NearestNeighbors
 from tqdm import tqdm
 
-# ─────────────────────────────────────────────────────────────────────────────
+
 # CONFIG — loaded from config.yaml (section: pretub_check)
-# ─────────────────────────────────────────────────────────────────────────────
+
 _cfg = yaml.safe_load(open(Path(__file__).with_name("config.yaml")))["pretub_check"]
 
 TEST_DIR      = _cfg["test_dir"]
@@ -25,10 +25,7 @@ def clean_id(s):
     s = str(s).strip()
     return re.sub(r'(\.0+|_0)$', '', s)
 
-# ─────────────────────────────────────────────────────────────────────────────
 # CORE FUNCTIONS
-# ─────────────────────────────────────────────────────────────────────────────
-
 def load_basin_tensor(path):
     """Loads and flattens the 7D state tensor."""
     t = torch.load(path, map_location="cpu")
@@ -37,7 +34,7 @@ def load_basin_tensor(path):
     return arr[~np.isnan(arr).any(axis=1)]
 
 def main():
-    # 1. Identify files
+    # Identify files
     all_files = os.listdir(TEST_DIR)
     basin_map = {}
     for f in all_files:
@@ -50,13 +47,13 @@ def main():
         print(f"Error: Reference basin {REF_BASIN_ID} not found in {TEST_DIR}")
         return
 
-    # 2. Load Reference Basin and fit a KDTree for speed
+    # Load Reference Basin and fit a KDTree for speed
     print(f"Loading Reference Basin: {REF_BASIN_ID}...")
     ref_pts = load_basin_tensor(basin_map[REF_BASIN_ID])
     # n_neighbors=1 because we just want the closest point in the reference manifold
     nn = NearestNeighbors(n_neighbors=1, algorithm='auto').fit(ref_pts)
 
-    # 3. Iterate through all basins and compute distance to Reference
+    # Iterate through all basins and compute distance to Reference
     results = []
     print("Computing distances to reference manifold...")
     
@@ -80,7 +77,7 @@ def main():
         except Exception as e:
             print(f"Skipping {bid}: {e}")
 
-    # 4. Process and Save
+    # Process and Save
     df = pd.DataFrame(results).sort_values("mean_dist")
     
     # Calculate "Proximity Rank" (1 = closest to the reference)
