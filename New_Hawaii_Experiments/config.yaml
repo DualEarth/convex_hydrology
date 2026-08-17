@@ -1,7 +1,7 @@
-# Hawaii (parquet/WRF-Hydro) experiment — analysis configuration
+# Hawaii (WRF-Hydro) experiment — analysis configuration
 # Run directories, thresholds, and file patterns for the consolidated
 # convex-hull / PCA / Mahalanobis extrapolation analysis scripts in this folder.
-# Confirmed current run: runs/my_parquet_run/lstm_parquet_custom_2003_235626
+
 
 hull_analysis:            # hull_analysis.py — raw autoencoder-7D reduced-state space
   train_file:      runs/my_parquet_run/lstm_parquet_custom_1508_220048/internal_states/train/c_n_reduced_epoch003.pt
@@ -20,7 +20,7 @@ hull_analysis:            # hull_analysis.py — raw autoencoder-7D reduced-stat
   reference_basin: null   # set to a basin ID to highlight it (see pretub_check.py for perturbation pairs)
   perturbed_basin: null
 
-pca_hull_analysis:        # pca_hull_analysis.py — PCA(7D)-of-full-hidden-state space
+pca_hull_analysis:       
   train_state_dir: runs/my_parquet_run/lstm_parquet_custom_2003_235626/internal_states/train
   val_state_dir:   runs/my_parquet_run/lstm_parquet_custom_2003_235626/internal_states/validation
   test_state_dir:  runs/my_parquet_run/lstm_parquet_custom_2003_235626/internal_states/test
@@ -38,10 +38,8 @@ pca_hull_analysis:        # pca_hull_analysis.py — PCA(7D)-of-full-hidden-stat
   n_bins:          5
   rng_seed:        42
 
-# The two runs below (2003_221953 = with static attrs, 2003_235626 = without)
-# are a deliberate pair for the with/without-static-attributes comparison —
-# not the same thing as the single canonical run above.
-compare_static_vs_no_static:   # compare_static_vs_no_static.py
+# configs for comparing with and without static attributes
+compare_static_vs_no_static:   
   csv_with_static: runs/my_parquet_run/lstm_parquet_custom_2003_221953/analysis_plots/basin_metrics.csv
   csv_no_static:   runs/my_parquet_run/lstm_parquet_custom_2003_235626/analysis_plots/basin_metrics.csv
   output_dir:      comparison_plots_hawaii
@@ -69,10 +67,8 @@ seven_time:                # seven_time.py — rolling NNSE vs hull-extrapolatio
   predict_last_n: 10
   nnse_min_mean:  null
 
-# NOTE: this path predates the my_parquet_run/ convention used everywhere else
-# in this folder — preserved exactly as found in the original script. Verify
-# it's still correct before running.
-pretub_check:               # pretub_check.py — 1-NN proximity check for a perturbed-basin pair
+# config for pertubation test
+pretub_check:              
   test_dir:            runs/lstm_parquet_custom_2303_210929/internal_states/test
   reference_basin_id:  "80000100000002"
   perturbed_basin_id:  "50000100000002"
