@@ -33,9 +33,9 @@ from scipy.spatial import ConvexHull, KDTree, Delaunay
 
 from utils import load_nse, bootstrap_spearman, bootstrap_loess, binned_trend
 
-# ─────────────────────────────────────────────────────────────────────────────
+
 # CONFIG — loaded from config.yaml (section: pca_hull_analysis)
-# ─────────────────────────────────────────────────────────────────────────────
+
 _cfg = yaml.safe_load(open(Path(__file__).with_name("config.yaml")))["pca_hull_analysis"]
 
 TRAIN_STATE_DIR = _cfg["train_state_dir"]
@@ -58,9 +58,8 @@ N_BINS          = _cfg["n_bins"]
 RNG_SEED        = _cfg["rng_seed"]
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+
 # LOAD
-# ─────────────────────────────────────────────────────────────────────────────
 def find_last_epoch(folder, pattern):
     matches = []
     for fname in os.listdir(folder):
@@ -107,10 +106,7 @@ def load_test_basins(folder, pattern):
     print(f"  Loaded {len(basin_data)} test basins.")
     return basin_data
 
-
-# ─────────────────────────────────────────────────────────────────────────────
 # PCA
-# ─────────────────────────────────────────────────────────────────────────────
 def fit_pca_and_plot(ref_data, n_components, output_dir):
     n        = min(256, ref_data.shape[1])
     pca_full = PCA(n_components=n).fit(ref_data)
@@ -139,9 +135,9 @@ def fit_pca_and_plot(ref_data, n_components, output_dir):
     return pca
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+
 # HULL + DISTANCES
-# ─────────────────────────────────────────────────────────────────────────────
+
 def subsample(data, max_pts, seed=42):
     if len(data) <= max_pts:
         return data
@@ -169,7 +165,7 @@ def compute_distances(test_points, ref_data, delaunay, tree):
     test_t = torch.tensor(test_points, dtype=torch.float32, device=device)
     ref_t  = torch.tensor(ref_data,    dtype=torch.float32, device=device)
 
-    # ── Hull distance (GPU nearest vertex, CPU inside check) ─────────────────
+    # Hull distance (GPU nearest vertex, CPU inside check)
     if tree is not None:
         verts_t   = torch.tensor(tree.data, dtype=torch.float32, device=device)
         batch     = 10000
@@ -185,7 +181,7 @@ def compute_distances(test_points, ref_data, delaunay, tree):
     else:
         hull_dist = np.zeros(len(test_points))
 
-    # ── Centroid distance (GPU) ───────────────────────────────────────────────
+    # Centroid distance (GPU) 
     centroid  = ref_t.mean(0)
     cent_dist = []
     for i in range(0, len(test_t), 10000):
@@ -194,7 +190,7 @@ def compute_distances(test_points, ref_data, delaunay, tree):
         )
     cent_dist = np.concatenate(cent_dist)
 
-    # ── Mahalanobis (GPU) ─────────────────────────────────────────────────────
+    # Mahalanobis (GPU) 
     cov  = LedoitWolf().fit(ref_data)
     VI   = torch.tensor(cov.get_precision(), dtype=torch.float32, device=device)
     loc  = torch.tensor(cov.location_,       dtype=torch.float32, device=device)
@@ -234,9 +230,9 @@ def compute_basin_metrics(basin_data_pca, ref_pca, delaunay, tree, mahal_thresho
     return pd.DataFrame(rows)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+
 # PLOT
-# ─────────────────────────────────────────────────────────────────────────────
+
 def plot_xy(x, y, output_dir, x_col, xlabel, boot, loess_result, bins,
             ylabel="NSE"):
     x_grid, obs_loess, lo, hi = loess_result
@@ -290,13 +286,12 @@ def plot_xy(x, y, output_dir, x_col, xlabel, boot, loess_result, bins,
     print(f"  Saved: {fname}")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # MAIN
-# ─────────────────────────────────────────────────────────────────────────────
+
 def main():
     t0 = time.perf_counter()
 
-    # ── Load last epoch train + validation ───────────────────────────────────
+    # Load last epoch train + validation
     print("\nLoading train states (last epoch)...")
     train_raw = load_last_epoch(TRAIN_STATE_DIR, r'c_n_epoch(\d+)\.pt$')
 
@@ -306,17 +301,17 @@ def main():
     ref_raw = np.vstack([train_raw, val_raw]) if val_raw is not None else train_raw
     print(f"\nReference (train+val): {ref_raw.shape}")
 
-    # ── Fit PCA ───────────────────────────────────────────────────────────────
+    # Fit PCA 
     print(f"\nFitting PCA ({PCA_DIMS}D)...")
     pca     = fit_pca_and_plot(ref_raw, PCA_DIMS, OUTPUT_DIR)
     ref_pca = pca.transform(ref_raw)
 
-    # ── Build hull on subsampled reference ────────────────────────────────────
+    # Build hull on subsampled reference 
     print("\nBuilding convex hull...")
     hull_data            = subsample(ref_pca, MAX_HULL_PTS, RNG_SEED)
     hull, delaunay, tree, _ = build_hull(hull_data)
 
-    # ── Load + project test basins ────────────────────────────────────────────
+    # Load + project test basins
     print("\nLoading test basin states...")
     basin_data_raw = load_test_basins(TEST_STATE_DIR, TEST_PATTERN)
     if not basin_data_raw:
@@ -326,13 +321,13 @@ def main():
     basin_data_pca = {bid: pca.transform(pts)
                       for bid, pts in basin_data_raw.items()}
 
-    # ── Compute metrics ───────────────────────────────────────────────────────
+    # Compute metrics
     print("\nComputing per-basin metrics...")
     df = compute_basin_metrics(
         basin_data_pca, ref_pca, delaunay, tree, MAHAL_THRESHOLD
     )
 
-    # ── Attach NSE + filter ───────────────────────────────────────────────────
+    # Attach NSE + filter
     nse_map  = load_nse(NSE_FILE, NSE_BASIN_COL, NSE_SCORE_COL)
     df["NSE"] = df["basin_id"].map(lambda b: float(nse_map.get(str(b), np.nan)))
     df        = df[df["NSE"] > NSE_MIN_FILTER].copy()
@@ -342,7 +337,7 @@ def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     df.to_csv(os.path.join(OUTPUT_DIR, "basin_metrics_pca.csv"), index=False)
 
-    # ── 4 plots ───────────────────────────────────────────────────────────────
+    # 4 plots
     plot_specs = [
         ("sum_distance_convex_hull",
          "Sum of Extrapolated Dist. From Convex Hull (log)"),
