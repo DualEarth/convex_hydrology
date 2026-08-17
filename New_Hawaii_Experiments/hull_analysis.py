@@ -1,12 +1,8 @@
 """
-hull_analysis.py  (Hawaii / parquet)
-──────────────────────────────────────
-Canonical raw-7D (autoencoder-reduced) convex-hull / Mahalanobis extrapolation
-analysis. Addresses reviewer comments on statistical robustness:
-  1. Bootstrap CI on Spearman r (robust to tail outliers)
-  2. Bootstrapped LOESS band instead of polynomial (no overfitting)
-  3. Binned trend with mean ± std error bars (shows trend holds across full range)
+hull_analysis.py
 
+Canonical raw-7D (autoencoder-reduced) convex-hull / Mahalanobis extrapolation
+analysis.
 Run paths and thresholds come from config.yaml (section: hull_analysis) in
 this same folder — edit that file to point at a new training run, nothing
 in this script needs to change.
@@ -38,9 +34,8 @@ from sklearn.covariance import LedoitWolf
 
 from utils import bootstrap_spearman, bootstrap_loess, binned_trend
 
-# ─────────────────────────────────────────────────────────────────────────────
+
 # CONFIG — loaded from config.yaml (section: hull_analysis)
-# ─────────────────────────────────────────────────────────────────────────────
 _cfg = yaml.safe_load(open(Path(__file__).with_name("config.yaml")))["hull_analysis"]
 
 TRAIN_FILE      = _cfg["train_file"]
@@ -65,9 +60,8 @@ REFERENCE_BASIN = _cfg["reference_basin"]
 PERTURBED_BASIN = _cfg["perturbed_basin"]
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 1. DATA LOADING
-# ─────────────────────────────────────────────────────────────────────────────
+# DATA LOADING
+
 def load_train(path):
     data = torch.load(path, map_location="cpu").numpy()
     data = data[~np.isnan(data).any(axis=1)]
@@ -125,10 +119,8 @@ def load_nse_all(nse_file, basin_col):
     nse_maps["mean"] = df[var_cols].mean(axis=1).to_dict()
     return nse_maps
 
+# GEOMETRY
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 2. GEOMETRY
-# ─────────────────────────────────────────────────────────────────────────────
 def subsample(data, max_pts, seed=42):
     if len(data) <= max_pts:
         return data
@@ -164,10 +156,7 @@ def compute_mahalanobis(train_data, points):
     sq   = np.sum(diff @ VI * diff, axis=1)
     return np.sqrt(np.clip(sq, 0, None))
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 3. PER-BASIN METRICS  (computed entirely in memory — no CSV roundtrip)
-# ─────────────────────────────────────────────────────────────────────────────
+# PER-BASIN METRICS 
 def compute_per_basin_metrics(basin_data, train_data, hull,
                                delaunay, tree, centroid, mahal_threshold):
     all_points = np.vstack(list(basin_data.values()))
@@ -214,16 +203,8 @@ def compute_per_basin_metrics(basin_data, train_data, hull,
     return df
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 4. BOOTSTRAP  (Spearman r + LOESS curve)
-# ─────────────────────────────────────────────────────────────────────────────
-# bootstrap_spearman, bootstrap_loess, binned_trend live in utils.py (shared
-# with pca_hull_analysis.py in this folder).
+# PLOT  (bootstrapped LOESS band + binned trend + no polynomial)
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# 5. PLOT  (bootstrapped LOESS band + binned trend + no polynomial)
-# ─────────────────────────────────────────────────────────────────────────────
 def _get_special_xy(basin_df, basin_id, x_col):
     """Look up a single basin's (x, y) point for scatter highlighting."""
     if basin_df is None or basin_id is None:
@@ -255,7 +236,7 @@ def plot_xy(x_all, y_all, x_log, output_dir, x_col, xlabel,
     fig, axes = plt.subplots(1, 2, figsize=(14, 5.5),
                              gridspec_kw={"width_ratios": [2, 1]})
 
-    # ── Left panel: scatter + bootstrapped LOESS band ─────────────────────────
+    #  scatter + bootstrapped LOESS band
     ax = axes[0]
     sc = ax.scatter(x_pos, y_pos, c=y_pos, cmap="viridis",
                     s=40, alpha=0.6, zorder=3, label="test basin")
@@ -297,7 +278,7 @@ def plot_xy(x_all, y_all, x_log, output_dir, x_col, xlabel,
     ax.grid(True, alpha=0.3)
     ax.legend(fontsize=10, loc="lower left")
 
-    # ── Right panel: binned mean ± std ────────────────────────────────────────
+    # Right panel: binned mean ± std 
     ax2 = axes[1]
     ax2.errorbar(
         bin_stats["x_centre"], bin_stats["mean"],
@@ -327,9 +308,8 @@ def plot_xy(x_all, y_all, x_log, output_dir, x_col, xlabel,
     print(f"  Saved: {fname}")
 
 
-# ─────────────────────────────────────────────────────────────────────────────
+
 # 6. OPTIONAL 3D VIZ
-# ─────────────────────────────────────────────────────────────────────────────
 def visualise_3d(train_data, hull_data, basin_data, nse_map, hull, color_mode):
     try:
         import pyvista as pv
@@ -478,9 +458,8 @@ def run_analysis_for_score(df_metrics, nse_map, score_name, ylabel, output_dir):
     return None
 
 
-# ─────────────────────────────────────────────────────────────────────────────
 # MAIN
-# ─────────────────────────────────────────────────────────────────────────────
+
 def main(viz_mode=None):
     t0 = time.perf_counter()
 
