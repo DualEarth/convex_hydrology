@@ -78,12 +78,12 @@ def main():
     epoch = find_latest_epoch(run_dir)
     LOGGER.info(f"Using epoch {epoch}")
 
-    # ── Load model ────────
+    # Load model 
     model = get_model(cfg).to(device)
     model.load_state_dict(torch.load(run_dir / f"model_epoch{epoch:03d}.pt", map_location=device))
     model.eval()
 
-    # ── Load reducer ──────────────────────────────────────────────────────────
+    # Load reducer
     reducer_dim = cfg.as_dict().get("trainer", {}).get("reduced_state_dimension", 3)
     reducer = StateReducer(cfg.hidden_size, reducer_dim).to(device)
     reducer_path = run_dir / f"state_reducer_epoch{epoch:03d}.pth"
@@ -94,10 +94,10 @@ def main():
         LOGGER.warning("Reducer weights not found. Using untrained reducer.")
     reducer.eval()
 
-    # ── Run NH metrics ────────────────────────────────────────────────────────
+    # Run NH metrics
     start_evaluation(cfg=cfg, run_dir=run_dir, epoch=epoch, period="test")
 
-    # ── Collect states per basin ──────────────────────────────────────────────
+    # Collect states per basin
     scaler = load_scaler(run_dir)
     save_dir = run_dir / "internal_states" / "test"
     save_dir.mkdir(parents=True, exist_ok=True)
