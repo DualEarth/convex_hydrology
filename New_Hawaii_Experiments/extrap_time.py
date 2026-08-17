@@ -1,5 +1,5 @@
 """
-seven_time.py
+extrap_time.py
 ──────────────
 Compares two models (e.g. with vs without static attributes) by plotting:
   - Normalized rolling average NNSE across all basins [0, 1]
@@ -11,10 +11,6 @@ Normalization:
   - Both NNSE and hull distance normalized to [0, 1]
   - Both metrics use shared global min/max across both models
   - Hull distance min fixed at 0 (inside hull = 0, outside = positive)
-
-Alignment fix:
-  With predict_last_n=10, states are saved once per sequence.
-  NNSE is subsampled every PREDICT_LAST_N steps to align correctly.
 
 NNSE = 1 / (2 - NSE)
 """
