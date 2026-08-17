@@ -31,9 +31,9 @@ from utils import bootstrap_spearman, bootstrap_loess
 
 warnings.filterwarnings("ignore")
 
-# ─────────────────────────────────────────────────────────────────────────────
+
 # CONFIG — loaded from config.yaml (section: compare_static_vs_no_static)
-# ─────────────────────────────────────────────────────────────────────────────
+
 _cfg = yaml.safe_load(open(Path(__file__).with_name("config.yaml")))["compare_static_vs_no_static"]
 
 CSV_WITH_STATIC    = _cfg["csv_with_static"]
@@ -73,12 +73,7 @@ POINT_SIZE    = 45
 
 LABEL_WITH    = "With static attributes"
 LABEL_WITHOUT = "Without static attributes"
-# ─────────────────────────────────────────────────────────────────────────────
 
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-# bootstrap_loess now lives in hull_analysis_common.py (identical body; every
-# call site here already passes frac explicitly, so behaviour is unchanged).
 
 def spearman_ci(x, y, n_boot=1000, ci=95, seed=42):
     """Thin wrapper around the shared bootstrap_spearman, kept for the
@@ -105,7 +100,6 @@ def annotation_text(r, lo, hi, n, label):
             f"  n = {n}")
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
 
 def main():
     print("Loading CSVs...")
@@ -163,7 +157,7 @@ def main():
             if not datasets:
                 continue
 
-            # ── Figure ────────────────────────────────────────────────────────
+            #  Figure 
             fig, ax = plt.subplots(figsize=(11, 7))
 
             annotation_blocks = []
