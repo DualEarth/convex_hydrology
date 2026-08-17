@@ -1,0 +1,79 @@
+# Hawaii (parquet/WRF-Hydro) experiment — analysis configuration
+# Run directories, thresholds, and file patterns for the consolidated
+# convex-hull / PCA / Mahalanobis extrapolation analysis scripts in this folder.
+# Confirmed current run: runs/my_parquet_run/lstm_parquet_custom_2003_235626
+
+hull_analysis:            # hull_analysis.py — raw autoencoder-7D reduced-state space
+  train_file:      runs/my_parquet_run/lstm_parquet_custom_1508_220048/internal_states/train/c_n_reduced_epoch003.pt
+  test_dir:        runs/my_parquet_run/lstm_parquet_custom_1508_220048/internal_states/test
+  nse_file:        runs/my_parquet_run/lstm_parquet_custom_1508_220048/test/model_epoch003/test_metrics.csv
+  nse_basin_col:   basin
+  output_dir:      runs/my_parquet_run/lstm_parquet_custom_1508_220048/analysis_plots
+  file_pattern:    'c_n_reduced_epoch\d+_basin_([^\.]+)\.pt$'
+  max_hull_pts:    10000
+  mahal_threshold: 11.0
+  nse_min_filter:  0.0
+  n_bootstrap:     1000
+  ci_level:        95
+  n_bins:          5
+  rng_seed:        42
+  reference_basin: null   # set to a basin ID to highlight it (see pretub_check.py for perturbation pairs)
+  perturbed_basin: null
+
+pca_hull_analysis:        # pca_hull_analysis.py — PCA(7D)-of-full-hidden-state space
+  train_state_dir: runs/my_parquet_run/lstm_parquet_custom_2003_235626/internal_states/train
+  val_state_dir:   runs/my_parquet_run/lstm_parquet_custom_2003_235626/internal_states/validation
+  test_state_dir:  runs/my_parquet_run/lstm_parquet_custom_2003_235626/internal_states/test
+  nse_file:        runs/my_parquet_run/lstm_parquet_custom_2003_235626/test/model_epoch030/test_metrics.csv
+  nse_basin_col:   basin
+  nse_score_col:   NSE
+  output_dir:      runs/my_parquet_run/lstm_parquet_custom_2003_235626/analysis_plots_pca
+  test_pattern:    'c_n_epoch\d+_basin_([^\.]+)\.pt$'
+  pca_dims:        7
+  max_hull_pts:    10000
+  mahal_threshold: 11.0
+  nse_min_filter:  0.0
+  n_bootstrap:     1000
+  ci_level:        95
+  n_bins:          5
+  rng_seed:        42
+
+# The two runs below (2003_221953 = with static attrs, 2003_235626 = without)
+# are a deliberate pair for the with/without-static-attributes comparison —
+# not the same thing as the single canonical run above.
+compare_static_vs_no_static:   # compare_static_vs_no_static.py
+  csv_with_static: runs/my_parquet_run/lstm_parquet_custom_2003_221953/analysis_plots/basin_metrics.csv
+  csv_no_static:   runs/my_parquet_run/lstm_parquet_custom_2003_235626/analysis_plots/basin_metrics.csv
+  output_dir:      comparison_plots_hawaii
+  nse_min_filter:  0.0
+  loess_frac:      0.5
+  n_bootstrap:     1000
+  ci_level:        95
+  rng_seed:        42
+
+seven_time:                # seven_time.py — rolling NNSE vs hull-extrapolation-distance, time series
+  model_1:
+    label:    "Model w/ static attributes"
+    pickle:   runs/my_parquet_run/lstm_parquet_custom_2003_221953/test/model_epoch030/test_results.p
+    train_pt: runs/my_parquet_run/lstm_parquet_custom_2003_221953/internal_states/train
+    val_pt:   runs/my_parquet_run/lstm_parquet_custom_2003_221953/internal_states/validation
+    test_pt:  runs/my_parquet_run/lstm_parquet_custom_2003_221953/internal_states/test
+  model_2:
+    label:    "Model w/o static attributes"
+    pickle:   runs/my_parquet_run/lstm_parquet_custom_2003_235626/test/model_epoch030/test_results.p
+    train_pt: runs/my_parquet_run/lstm_parquet_custom_2003_235626/internal_states/train
+    val_pt:   runs/my_parquet_run/lstm_parquet_custom_2003_235626/internal_states/validation
+    test_pt:  runs/my_parquet_run/lstm_parquet_custom_2003_235626/internal_states/test
+  output_path:    comparison_nnse_hull_extrap.png
+  window:         8
+  predict_last_n: 10
+  nnse_min_mean:  null
+
+# NOTE: this path predates the my_parquet_run/ convention used everywhere else
+# in this folder — preserved exactly as found in the original script. Verify
+# it's still correct before running.
+pretub_check:               # pretub_check.py — 1-NN proximity check for a perturbed-basin pair
+  test_dir:            runs/lstm_parquet_custom_2303_210929/internal_states/test
+  reference_basin_id:  "80000100000002"
+  perturbed_basin_id:  "50000100000002"
+  output_file:         basin_proximity_analysis.csv

@@ -1,0 +1,121 @@
+run_dir: runs/my_parquet_run
+experiment_name: lstm_parquet_custom
+model: cudalstm
+trainer:
+  module: my_custom_trainer
+  class: CustomTrainer
+  save_internal_states: True
+  reduced_state_dimension: 7
+
+save_timeseries_states: True
+save_internal_states: True
+head: regression
+output_activation: linear
+
+dev_mode: True
+
+# Dataset
+dataset: parquetdataset
+data_dir: /home/dlfernando/Hawaii
+parquet_ldasin_dir: /home/dlfernando/Hawaii/par_out_ldasin_final
+parquet_ldasout_dir: /home/dlfernando/Hawaii/par_out_ldasout_final
+static_attributes_file: /home/dlfernando/Hawaii/Experiments/complete/static_attributes_complete.txt
+
+# Basins files
+train_basin_file: Experiments/complete/train_basins_complete.txt
+validation_basin_file: Experiments/complete/valid_basins_complete.txt
+test_basin_file: Experiments/complete/test_basins_complete.txt
+
+# Time periods
+train_end_date: 31/12/1995
+train_start_date: 01/01/1995
+
+validation_start_date: 01/05/1995
+validation_end_date: 30/06/1995
+
+test_end_date: 31/12/1996
+test_start_date: 01/09/1996
+
+
+# which GPU (id) to use [in format of cuda:0, cuda:1 etc, or cpu, mps or None]
+device: cuda:1
+
+# Model parameters
+hidden_size: 64
+seq_length: 112
+forecast_seq_length: 10
+predict_last_n: 10
+forecast_overlap: 0
+initial_forget_bias: 1.0 
+
+# Features & Targets
+target_variables:
+  #- ACCET
+  # - ACSNOM
+  # - ALBEDO
+  - COSZ
+  #- EDIR
+  - FIRA
+  - FSA
+  # - FSNO
+  - HFX
+  - LH
+  - QRAIN
+  # - QSNOW
+  # - SNEQV
+  #- SNOWH
+  - TRAD
+  #UGDRNOFF
+
+
+dynamic_inputs:
+  - LWDOWN
+  - PSFC
+  - Q2D
+  - RAINRATE
+  - SWDOWN
+  - T2D
+  - U2D
+  - V2D
+
+static_attributes:
+ - elev_mean
+ - elev_min
+ - elev_max
+ - slope_mean
+ - stream_gradient
+ - area_gages2
+ - area_geospa_fabric
+
+use_static_inputs: True
+
+
+# Training parameters
+optimizer: Adam
+loss: mse
+n_distributions: 5
+
+learning_rate:
+  0: 1e-3
+batch_size: 256
+epochs: 30
+
+metrics:
+  - NSE
+  - RMSE
+
+validate_n_random_basins: 20
+
+validate_every: 2
+log_n_figures: 20
+
+verbose: 1
+
+save_train_data: True
+
+
+num_workers: 0
+
+#set PYTHONPATH=C:\Users\deonf\Model_work
+#set KMP_DUPLICATE_LIB_OK=TRUE
+#python C:\Users\deonf\anaconda3\Lib\site-packages\neuralhydrology\nh_run.py train --config-file testrun.yml
