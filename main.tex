@@ -1,0 +1,610 @@
+\documentclass{article}
+
+
+\usepackage{PRIMEarxiv}
+
+\usepackage{graphicx}    % to include images
+\usepackage{subcaption}  % for subfigures
+\usepackage{geometry}    % optional, to adjust page margins
+\geometry{margin=1in}
+\usepackage[utf8]{inputenc} % allow utf-8 input
+\usepackage[T1]{fontenc}    % use 8-bit T1 fonts
+\usepackage{textcomp}       % support for Unicode minus sign
+\usepackage{hyperref}       % hyperlinks
+\usepackage{url}            % simple URL typesetting
+\usepackage{booktabs}       % professional-quality tables
+\usepackage{amsfonts}       % blackboard math symbols
+\usepackage{textcomp}       % support for Unicode minus sign
+\usepackage{nicefrac}       % compact symbols for 1/2, etc.
+\usepackage{microtype}      % microtypography
+\usepackage{lipsum}
+\usepackage{fancyhdr}       % header
+\usepackage{graphicx}       % graphics
+\usepackage{amsmath}
+\usepackage{adjustbox}
+
+\graphicspath{{media/}}     % organize your images and other figures under media/ folder
+
+%Header
+\pagestyle{fancy}
+\thispagestyle{empty}
+\rhead{ \textit{ }} 
+
+% Update your Headers here
+\fancyhead[LO]{ConvexHydrology}
+% \fancyhead[RE]{Firstauthor and Secondauthor} % Firstauthor et al. if more than 2 - must use \documentclass[twoside]{article}
+
+
+
+  
+%% Title
+\title{Extrapolation in hydrologic modeling: a balance between basin uniqueness and event uniqueness
+}
+
+\author{
+  Deon Fernando, Quinn Lee, Natasha Dimova, Mojdeh Rasoulzadeh and Jonathan M. Frame  \\
+  Affiliation \\
+  University of Alabama \\
+  Tuscaloosa, AL\\
+  \texttt{jmframe@ua.edu} \\
+   \And
+  Collins Mba \\
+  Affiliation \\
+  New Jersey Institute of Technology \\
+  Newark, NJ\\
+}
+
+
+\begin{document}
+\maketitle
+
+
+\begin{abstract}
+We present a method for describing hydrological extrapolation during model simulations based on convex hull analysis. We demonstrate that extrapolation based on neither event uniqueness nor basin uniqueness is sufficient to describe a model's ability to score well on a performance measure compared to observations. We include two case studies. Case study 1 is a controlled synthetic experiment using a Long Short-Term Memory (LSTM) as a surrogate of the Weather Research and Forecasting (WRF) Hydrological modeling system (WRF-Hydro) over Hawaii, where a LSTM is trained to represent the complete hydrological regime. Case study 2 uses the LSTM for rainfall-runoff modeling across the CAMELS-US basins. In both cases, a performance drop-off was observed under extrapolated conditions when considering individual regions and/or catchments, but a general trend of decreased performance under averaged extrapolation conditions was not observed in either case. We conclude that extrapolation alone is not sufficient to describe model degradation as a mechanism for forecast uncertainty, even though event uniqueness and basin uniqueness both lead to model degradation. 
+\end{abstract}
+
+
+% keywords can be removed
+\keywords{Extrapolation \and Hydrology \and Deep Learning}
+
+
+\section{Introduction}
+Long short-term memory (LSTM) networks have demonstrated state-of-the-art performance in rainfall-runoff modeling across a wide range of locations and hydrological tasks \cite{Kratzert2018lstm, Fang2017smap, Feng2020}, as have differentiable conceptual models using LSTM for parameter prediction \cite{feng2022differentiable, Feng2022, Shen2023}. LSTM-based models are becoming popular for hydrologic forecasts designed for flood warnings \cite{Nearing2024}.  We aim to understand how the models behave and how their performance holds up under previously unseen conditions. The mean squared error (MSE) and its normalized counterpart, the Nash–Sutcliffe efficiency (NSE), are widely used for calibration and validation with observed data \cite{Gupta2009}. These residual-based metrics, on their own, provide limited insight into the internal reasoning or generalization behavior of the model. As Lees et al. (\cite{Lees2021}) pointed out, such metrics can indicate how well a model performs but not why it performs well or fails. This highlights the need for new interpretability and evaluation frameworks that can assess model behavior under unique hydrological conditions, basin charactaristics and events with the hope of guiding the development of more robust hydrological forecasting systems. In particular, there is a need for diagnostic techniques that not only evaluate performance but also provide insights into the underlying mechanics of the model.
+
+Despite the demonstrated accuracy of deep learning models in rainfall–runoff prediction, skepticism persists within the hydrological community regarding their reliability under low-probability conditions \cite{frame2022extreme}. Historically, physical process-based models have been favored for their interpretability and grounding in hydrological theory, whereas data-driven approaches, particularly early neural networks, have been criticized for their dependence on training data and lack of physical insight \cite{Todini2007, Sellars2018}. Although such concerns were valid in the context of shallow neural networks \cite{Cameron2002, Gaume2003}, LSTMs have demonstrated strong generalization capabilities across basins and climates \cite{Kratzert2019pub}. Nevertheless, questions remain regarding the robustness of these models in extreme hydrological scenarios, particularly their internal behavior. Understanding how these models function under stress is important not only for improving their predictive performance but also for building trust in data-driven forecasting tools. To this end, this study proposes a method for LSTM internal cell states to indicate unique hydrological conditions that may be outside the training data set. We demonstrate how deviations from the training-state dynamics can indicate a reliability loss.
+
+In its most basic sense, extrapolation occurs when a model is asked to make a prediction using input data that falls outside the range or distribution of the data it was trained on. In hydrology, this most often happens during events that are unprecedented in the training data, or when applying a model to a new basin (spatial generalization). This study explores model robustness by focusing on the relationship between these unseen conditions and prediction accuracy. Specifically, we test the following hypotheses: 
+
+\begin{itemize} 
+\item H1 (Primary Hypothesis) Extrapolation leads to a direct and quantifiable performance degradation in Long Short-Term Memory (LSTM) hydrological models. 
+\item H2 (Contributing Factors) Model performance degradation under extrapolation is a result of two combined mechanisms: ``event uniqueness'' (unseen hydrologic forcing and conditions) and ``basin uniqueness'' (unseen catchment characteristics). 
+\end{itemize}
+
+Meyer and Pebesma \cite{Meyer2021} argued that traditional interpolation and extrapolation distinctions are insufficient for understanding generalization in high dimensional settings with modern machine learning and called for rethinking evaluation methods and model design to better account for this pervasive extrapolation. After all, it is likely that when we are dealing with large dimensions, such as in hydrology models using several dynamics forcings mixed with static attributes, there is always extrapolation \cite{balestriero2021learning}. Kalai et al. \cite{kalai2025why} have examined why models produce confident yet incorrect outputs under unfamiliar conditions. They showed that large language models tend to “hallucinate” most often on examples that are absent or appear only once in their training data, an effect statistically analogous to hydrologic extrapolation, where rare or unseen basins and events push models beyond their learned domain.
+
+Baste et al. \cite{baste2025unveiling} studied LSTM extrapolation for rainfall-runoff modeling in terms of events outside the range of the observed precipitation data. They found that LSTMs struggled to predict discharge values beyond a theoretical limit that was below the range of the training data. This artifact has also motivated differentiable conceptual modeling, where an LSTM is used to predict not the runoff itself, but rather the parameters influencing the runoff magnitude \cite{song2025physicsinformed}.  Both \cite{song2025physicsinformed} and \cite{acuna2024analyzing} demonstrated the limitations of LSTMs for extreme events, showing that differentiable conceptual modeling helps predict peak flows, albeit marginally.
+
+In this study, we considered extrapolation from the perspective of hydrologic states, rather than precipitation alone. The states of the LSTM capture not only hydrologic events but also the antecedent hydrologic conditions. Burnett et al. \cite{Burnett2025} assumes extrapolation occurs when the inference input data are outside the convex hull of the training input data. We assume that when LSTM states are outside the convex hull of the internal cell states during training, it is an extrapolation of the data. 
+
+The exploration of internal representations in LSTM models for hydrological modeling is still in its early stages \cite{Lees2021}. Recent studies suggest that the internal states of LSTM networks encode meaningful hydrological information, even when the model is not explicitly trained to do so. For example, Kratzert et al. (\cite{Kratzert2018lstm}) demonstrated that certain cell states are correlated with the snow water equivalent, despite the model being trained solely to predict discharge from meteorological inputs. In a follow-up study, Kratzert et al. (\cite{Kratzert2019universal}) found significant correlations between LSTM cell states and key hydrological variables such as upper-zone storage, lower-zone storage, and snow depth. Similarly, Lees et al. (\cite{Lees2021}) showed that LSTM internal states provide evidence of physically realistic representations, indicating that the model implicitly learns meaningful hydrological mapping. These findings suggest that the internal dynamics of LSTM networks play a critical role in decision-making and are essential for a deeper understanding of the model’s operational capabilities. Through the Markovian property LSTM hidden states contain information of the antecedent hydrologic conditions, dynamic forcings and hydrologic response at each simulation timestep. Motivated by these insights, this study proposes a novel method for assessing the model performance under extrapolation by analyzing the behavior of the model’s latent (hidden state) space.
+
+\section{Methods}
+\label{sec:methods}
+
+To capture the full extent of the LSTM model behavior in unique out-of-sample events, we developed two case studies. Both case studies use a single-layer LSTM model in the NeuralHydrology framework\cite{Kratzert2022open}. Case study 1 as a surrogate model of NOAA's National Water Model, and Case study 2 as a rainfall-runoff model on a large-sample study across the CAMELS Basins.
+
+\subsection{Internal State Extraction and Logging}
+
+\subsubsection{Custom Trainer}
+
+Although the NeuralHydrology framework \cite{Kratzert2022open} provides built-in training and evaluation scripts, we developed \texttt{Custom Trainer} classes to enable the recording of internal LSTM states, specifically the cell states ($C_n$), during the training, validation, and testing. We focused on recording cell states rather than hidden states because cell states provide a more complete representation of the internal memory of the LSTM. Previous studies have shown that LSTM cell states contain interpretable hydrological information\cite{Lees2021}. NeuralHydrology's native internal state logging functionality records states post-epoch by reloading the trained model weights into a \texttt{CustomLSTM} class. However, this approach does not support the real-time tracking of internal states during the forward pass, which is essential for our analysis of the model.
+
+Our \texttt{Custom Trainer} retains the use of the \texttt{CudaLSTM} model, allowing GPU-accelerated training and substantially higher efficiency compared to \texttt{Custom LSTM}. This design enables the recording of internal state trajectories during training and validation without compromising performance. The recorded states were subsequently used for extrapolation analysis to assess the generalization behavior of the basins. The custom trainer was integrated into the framework by registering it in \texttt{neuralhydrology.training.train.py}.
+
+The trainer was configured to record the internal states from the final epoch and to save the states at each validation step. This ensured that the most up-to-date cell states were available for the subsequent convex hull analysis. Similar to standard NeuralHydrology trainers, the custom trainer also saved the model weights for each epoch, enabling the reproducibility and evaluation of the learned models.
+
+\subsubsection{Custom Tester}
+
+To facilitate the recording of internal states during the evaluation, we developed a standalone \texttt{Custom Tester} script. Unlike the standard NeuralHydrology evaluation pipeline, this script operates independently, providing enhanced flexibility for custom analyses. For each test basin, the tester loads the relevant time-series data from the custom dataset, applies the model using the weights of the final training epoch, and records the corresponding internal cell states ($C_n$; representing the internal memory of both forcing variables and hydrologic response) for each basin. This allowed us to compare the individual basin performance and identify basins for which the model performed poorly.
+
+This approach allows a fine-grained examination of the memory dynamics of the LSTM in different basins. Additionally, the tester leverages the metric computation utilities of NeuralHydrology to generate a CSV file in which each row corresponds to a test basin, and each column contains evaluation metrics for the target variables specified in the configuration file. This design ensures both detailed internal state tracking and standardized performance evaluation.
+
+\subsection{Dimensionality Reduction}
+
+Accurate hydrological prediction requires an appropriately chosen hidden state size that enables the model to capture complex nonlinear relationships between the inputs and outputs \cite{Kratzert2024}.This consideration is particularly important in our study, which aims to develop a surrogate for the National Water Model (NWM) with many dynamic inputs and target variables. Following conventions in the hydrology community, we set the LSTM hidden state size to 256, resulting in internal cell states ($C_n$) that are 256-dimensional vectors \cite{Kratzert2024}.
+
+However, convex hull-based extrapolation diagnostics that operate in a 256-dimensional space are both computationally intensive and difficult to visualize. Therefore, we reduced the dimensionality of the internal states to 3D to enable geometric analysis and visualization. We selected 3D specifically because: (1) it provides sufficient degrees of freedom to preserve the essential state space structure while remaining computationally tractable, (2) 3D convex hulls can be efficiently computed and visualized, and (3) preliminary experiments showed that reduction to 2D resulted in significant information loss, whereas expansion beyond 3D provided diminishing returns for extrapolation analysis.
+
+Standard dimensionality reduction techniques, such as Principal Component Analysis (PCA) \cite{Wold1987PCA}, t-distributed Stochastic Neighbor Embedding (t-SNE) \cite{Cai2021tSNE}, and Uniform Manifold Approximation and Projection (UMAP) \cite{McInnes2018UMAP}, were initially considered. While effective in many contexts, these fixed transformations may fail to preserve fine-grained structures when reducing the dimensions from 256 to 3, particularly for such aggressive dimensionality reduction.
+
+To address this limitation, we implemented a trainable state reduction module within our model \cite{zamparo2015deep}. This module maps the 256-dimensional internal states to a 3-dimensional representation via a small neural network (Encoder) consisting of three linear layers interleaved with two Rectified Linear Unit (ReLU) activations as follows:
+
+\begin{verbatim}
+Input (256D) → Linear → ReLU → Linear → ReLU → Linear → Output (3D)
+\end{verbatim}
+
+The nonlinear ReLU layers allow the reduction network to learn complex mappings that better preserve relationships in the internal state space than linear or fixed methods. The reduction module was trained end-to-end with the main LSTM model, and its weights were saved with the primary model checkpoints. During evaluation, the custom testing script loads the trained reduction weights to ensure consistency in the dimensionality transformation between the training and testing phases. By learning the reduced representation directly from the internal state distributions encountered during training, this approach preserves the task-specific structure and dynamics, leading to more reliable extrapolation diagnostics and interpretable 3D representations of internal states.
+
+\subsection{Convex Hull Computation}
+
+The core analytical component of this study is the convex hull-based analysis of internal LSTM states, which provides a geometric framework for distinguishing interpolated from extrapolated regions in the model's internal representation space. We use a 3D representation of the full LSTM cell states for ease of computation, human intuition, and plotting convenience. 
+
+A convex hull represents the smallest convex shape that encloses all points in a given set. Geometrically, it can be visualized as the shape formed by stretching a rubber band around all the outermost points, and the resulting boundary defines a convex hull. In our context, the convex hull of the training and validation states defines the boundary of the ``training envelope'' in the reduced internal state space. Any test state that falls inside this hull represents interpolation (the model operates within the range of conditions it has encountered during training), whereas test states outside the hull represent extrapolation (the model encounters internal state configurations beyond its training experience). This geometric interpretation provides an intuitive and interpretable method for assessing when an LSTM model is likely to operate outside its reliable-prediction domain.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.8\linewidth]{Convex_Hull_Schematic.png}
+    \caption{Simplified 2D Schematic figure of the convex hull}
+    \label{fig:placeholder}
+\end{figure}
+
+Let $\mathbf{S} = \{\mathbf{s}_1, \mathbf{s}_2, \ldots, \mathbf{s}_n\}$ represent the set of 3D reduced internal cell states from the combined training and validation datasets, where each $\mathbf{s}_i \in \mathbb{R}^3$. First, we constructed a convex hull using these state points. Because the combined point cloud can be dense and irregular, we applied the following centroid-based outlier-filtering approach to prevent extreme points from disproportionately affecting the hull geometry.
+
+The centroid of all the training and validation states is computed as
+\begin{equation}
+\boldsymbol{\mu} = \frac{1}{n} \sum_{i=1}^{n} \mathbf{s}_i.
+\end{equation}
+
+For each state $\mathbf{s}_i$, we calculated its distance from the centroid using the Euclidean ($L^2$) norm as follows
+\begin{equation}
+d_i = \|\mathbf{s}_i - \boldsymbol{\mu}\|_2.
+\end{equation}
+
+We retained only the states within the 99th percentile of this distance distribution.
+\begin{equation}
+\mathbf{S}_{\text{filtered}} = \{\mathbf{s}_i \in \mathbf{S} : d_i \leq P_{99}(\{d_1, d_2, \ldots, d_n\})\},
+\end{equation}
+where $P_{99}$ denotes the 99th percentile. This filtering step removes approximately 1--2\% of the most extreme states while preserving the core structure of the state distribution.
+
+The convex hull $\mathcal{H}$ of the filtered state set is defined as
+\begin{equation}
+\text{ConvexHull}(\mathbf{X}) = \left\{\sum_{i=1}^{N} \alpha_i \mathbf{x}_i \mid \alpha_i \geq 0, \sum_{i=1}^{N} \alpha_i = 1\right\},
+\end{equation}
+where $\mathbf{X} = \{\mathbf{x}_1, \mathbf{x}_2, \ldots, \mathbf{x}_N\}$ represents our filtered state set $\mathbf{S}_{\text{filtered}}$ and $N = |\mathbf{S}_{\text{filtered}}|$ is the number of filtered states. The convex hull is computed using the \texttt{scipy.spatial.ConvexHull}\cite{scipy_spatial} function, which implements the QuickHull algorithm, a widely used method for constructing convex polyhedra in multidimensional spaces. \cite{Barber1996Quickhull}
+
+For each test state $\mathbf{s}_{\text{test}}$, we determine whether it lies inside or outside the hull using the following condition
+\begin{equation}
+\mathbf{s}_{\text{test}} \in \mathcal{H} \iff \exists \alpha_i \geq 0, \sum_{i=1}^{N} \alpha_i = 1 : \mathbf{s}_{\text{test}} = \sum_{i=1}^{N} \alpha_i \mathbf{x}_i.
+\end{equation}
+
+For test states outside the hull ($\mathbf{s}_{\text{test}} \notin \mathcal{H}$), we record the corresponding basin (for post-hoc analysis) and compute the extrapolation distance from the boundary of the hull.
+
+\subsection{Extrapolation Distance Calculation}
+
+To quantify the degree of extrapolation for each test state, we computed the distance from the convex hull. Two primary methods are commonly used for this purpose:
+
+\textbf{Delaunay Triangulation:\cite{luo2021deepdt}} This approach constructs a triangulated surface representation of the convex hull and determines whether a point lies inside or outside the hull. The minimum distance to the triangulated surface was computed for the points outside the hull. Although computationally efficient, this method is sensitive to outliers in the training or validation data, which can distort hull geometry and produce skewed distance measurements.
+
+\textbf{Quadratic Programming (QP):\cite{chen2024convex}} In this approach, the distance computation is formulated as a convex optimization problem. Each extrapolated test point was projected onto the convex hull, and the nearest point on the hull surface was identified by solving the following constrained quadratic optimization problem
+
+\[
+\arg\min_{\mathbf{s} \in \mathcal{H}} \|\mathbf{s} - \mathbf{s}_{\text{test}}\|_2^2
+\]
+
+
+The extrapolation distance is defined as the square of the Euclidean distance between the test point and its projection.
+
+Although the QP-based approach is more computationally intensive than the Delaunay method, it provides greater robustness to outliers and yields more accurate and stable extrapolation distances. Given the centrality of this metric to our analysis, we employed the QP-based method for all evaluations. To mitigate the increased computational cost, we implemented multiprocessing, which enabled the extrapolation distances to be computed in parallel across the test samples and basins. This optimization significantly reduced the runtime, making the QP-based method feasible for scaling.
+
+This distance serves as a quantitative proxy for the degree of extrapolation, enabling the assessment of whether the model operates in regions of the input space that are well represented during training.
+
+\subsection{Mahalanobis Distances}
+
+Following Beven's framework for quantifying data dissimilarity in hydrological modeling, we used Mahalanobis distances as an alternative measure of extrapolation from the training data. The Mahalanobis distance accounts for correlations in the training state distribution and provides a probabilistic measure of the statistical unusualness of the test state relative to the training distribution.
+
+For a test state $\mathbf{x}_{\text{test}}$ and training state distribution with mean $\boldsymbol{\mu}$ and covariance matrix $\boldsymbol{\Sigma}$, the Mahalanobis distance is expressed as
+\[
+d_M(\mathbf{x}_{\text{test}}) = \sqrt{(\mathbf{x}_{\text{test}} - \boldsymbol{\mu})^T \boldsymbol{\Sigma}^{-1} (\mathbf{x}_{\text{test}} - \boldsymbol{\mu})}.
+\]
+
+This metric provides a complementary perspective to the geometric hull-based analysis, particularly in Case Study 2 (described below in Section \ref{sec:cs2}). While convex hulls identify absolute extrapolation boundaries, the Mahalanobis distance captures the statistical unusualness of the test states relative to the typical training patterns. Both metrics were computed for all test states to provide a comprehensive extrapolation assessment.
+
+\subsection{Performance metrics}
+NSE was used for most of the analyses as the measure of success. The Normalize NSE (NNSE) was used in certain plots to ensure values stay between zero and one, for the sake of visual clarity.
+
+\subsection{Case studies}
+We include both a synthetic and real-data case study to address our hypotheses in a controlled setting and a real-world setting. Both case studies use a large sample of basins. 
+
+
+\subsubsection{Case 1: Hourly Hydrologic Responses across Hawaii}
+\label{sec:cs1}
+
+WRF-Hydro uses several atmospheric forcing conditions to generate a suite of hydrologic states and fluxes. Table \ref{tab:variables} defines both the inputs (forcings) and targets (WRF-Hydro states and fluxes) on which we trained the LSTM. Each of these forcings, states and responses were summarized across basin boundaries to be suitable for LSTM as a time-series model.
+
+\begin{table}[ht]
+\label{tab:variables}
+  \centering
+  \caption{Definitions of input forcing and target hydrologic variables}
+  \label{tab:var_defs}
+  \begin{tabular}{|l|p{10cm}|}
+    \hline
+    \textbf{Symbol} & \textbf{Definition / Units} \\
+    \hline
+    \multicolumn{2}{|c|}{\textbf{Inputs}} \\
+    \hline
+    LWDOWN   & Downward longwave radiation flux \\
+    PSFC     & Surface pressure \\
+    Q2D      & Specific humidity \\
+    RAINRATE & Total precipitation \\
+    SWDOWN   & Downward shortwave radiation flux \\
+    T2D      & Temperature \\
+    U2D      & U-component of wind \\
+    V2D      & V-component of wind \\
+    \hline
+    \multicolumn{2}{|c|}{\textbf{Targets}} \\
+    \hline
+    % ACCET    & Accumulated evapotranspiration \\
+    COSZ     & Cosine of zenith angle \\
+    EDIR     & Direct evaporation flux from surface \\
+    FIRA     & Total net longwave radiation \\
+    FSA      & Total absorbed shortwave radiation \\
+    % FSNO     & Snow-cover fraction on the ground (fraction) \\
+    HFX      & Total sensible heat to atmosphere \\
+    LH       & Total latent heat flux \\
+    QRAIN    & Rate of liquid precipitation reaching the ground \\
+    TRAD     & Surface radiative temperature \\
+    \hline
+  \end{tabular}
+\end{table}
+
+This case study can be regarded as a synthetic-style experiment designed to test the model's ability to capture rapid hydrologic dynamics in small, fast-responding Hawaiian basins.  We chose Hawaii as our synthetic case study because relative consistency of hydrological regimes across the island allows use to control in favor of subtle extrapolations in both basin characteristics and event magnitude. We trained a CUDA-LSTM model from the NeuralHydrology framework using NOAA gridded meteorological forcing data. The model was provided with eight dynamic input variables (LWDOWN, PSFC, Q2D, RAINRATE, SWDOWN, T2D, U2D, and V2D) and configured to predict 8 hydrologic target variables (COSZ, EDIR, FIRA, FSA, HFX, LH, QRAIN, and TRAD), as described in Table \ref{tab:variables}. Note that snow related variables were not included because the prevalence of snow is spatially and temporally scarce. Accumulated variables were also excluded from this analysis, which includes Underground runoff and Evapotranspiration.
+
+The summarized forcing and response data were stored in Parquet format, with LDASIN variables available at a three-hour resolution and LDASOUT variables at an hourly resolution. To reconcile this frequency mismatch, we developed a custom dataset class that merges the inputs and outputs at a common hourly scale for each basin using upsampling interpolation.
+
+The 700 training basins and 100 validation basins were drawn from the island of Hawaii, whereas the 100 testing basins were selected from both Maui and O’ahu. This spatial separation tests the transferability of the model across similar geological settings while avoiding geographic overfitting. Because the basins were from the same geological region, static attributes were not used as part of the training data set. Temporal splits were defined as follows:
+
+\begin{itemize}
+    \item \textbf{Training:} January 1, 1995 -- December 31, 1995
+    \item \textbf{Validation:} May 1, 1995 -- June 30, 1995
+    \item \textbf{Testing:} September 1, 1996 -- December 31, 1996
+\end{itemize}
+
+The test period was deliberately chosen to coincide with a phase in which Hawaii experienced several notable hydrological extremes, providing a robust evaluation of the model's ability to generalize under challenging conditions.
+
+\subsubsection{Case 2: Daily Rainfall-Runoff Responses across CONUS}
+\label{sec:cs2}
+
+This case study follows the tradition of large-sample hydrologic modeling with LSTMs for rainfall-runoff prediction. To train the NeuralHydrology CUDA-LSTM model, we used the conventional CAMELS-US dataset. The evaluation was conducted using a two-fold cross-validation scheme for all 671 basins. In each round, 50\% of the basins were used for training, and the remaining 50\% were used for testing; the roles of the two groups were then swapped. We used hyperparameters selected from previous students, so no separate validation set was used.
+
+In contrast to the Hawaii experiment, the CAMELS-US dataset is much larger and more diverse, encompassing continental-scale climatic and physiographic variations in the United States. Therefore, all available static attributes were included as predictors, in addition to meteorological forcing, to capture this heterogeneity in the model.
+
+The time splits used were
+\begin{itemize}
+    \item \textbf{Training:} October 1, 1999 -- September 30, 2008
+    \item \textbf{Testing:} October 1, 1989 -- September 30, 1999
+\end{itemize}
+
+This reverse chronological split (training on later data and testing on earlier data) provides a conservative evaluation framework that tests the robustness of the model for potential temporal non-stationarity in hydrological systems.
+
+\subsection{Data}
+
+\subsubsection{NOAA NWM over Hawaii}
+We used the NOAA National Water Model (NWM) v2.1 simulation outputs over Hawaii, as described by Cosgrove et al. \cite{cosgrove2024noaa}. The model inputs were gridded meteorological forcings derived from WRF, and the outputs included hourly surface and subsurface runoff, soil moisture states, and streamflow at a spatial resolution of 1 km. Our surrogate model uses the same inputs and is trained to predict the same outputs, with the purpose of analyzing internal model states and their relationship to hydrologic conditions. All analyses were conducted at the same temporal and spatial resolutions as the NWM dataset.
+
+The input data comprised gridded FORCING and LDASOUT NetCDF files for the years 1994–1996, containing 8 and 20 variables respectively. These data were aggregated over 10,451 hydrologic divides defined in a Hawaii-specific GeoPackage. Because the FORCING and LDASOUT files use different coordinate reference systems (projected and geographic, respectively), we applied appropriate CRS transformations to align them with the basin boundaries before extraction.
+
+For each basin, we computed the mean value of all pixels fall within its boundary, producing spatially aggregated time series for each variable. The resulting data were stored in columnar format to facilitate efficient analysis during model training. From the complete dataset, we selected 1,000 divides with minimal missing data for training, validation, and testing. Among these, 200 divides affected by major floods in 1996 were designated as the test set to evaluate the performance of the model under extreme hydrological conditions.
+
+Among the 20 WRF-Hydro output variables, ALBEDO, ALBSND, ALBSNI, ACSNOM, SOIL\_M, and SOIL\_W were excluded from model training due to extensive missing values across most basins. Snow-related variables (SNOWH, SNEQV, QSNOW, and FSNO) were also omitted, as the selected basins in Hawaii experience negligible snowfall. In addition, the WRF-Hydro variables UGDRNOFF and ACCET are generated as cumulative quantities, which complicates their direct use as predictive targets. Although a cumulative correction was applied, UGDRNOFF exhibited minimal hydrologic response in subsequent analyses and was therefore excluded from training as an unreliable variable.
+
+\paragraph{WRF-Hydro}
+WRF-Hydro is the core modeling framework of the NWM. It includes land surface processes and routing capabilities of the model. The version used in the operational NWM configuration included Noah-MP for land surface modeling and a Muskingum-Cunge routing scheme over NHDPlus reaches. The WRF-Hydro model supports gridded surface and subsurface water flux simulations. Details are provided by Salas et al. \cite{salas2018towards} and Cosgrove et al. \cite{cosgrove2024noaa}.
+
+\paragraph{Hydrofabric}
+All model predictions, including both NWM and surrogate outputs, were aggregated and compared on the hydrofabric defined by the NOAA Next Generation Water Resources Modeling Framework. The hydrofabric includes standardized catchments, flow paths, and topological relationships used to support large-domain hydrologic modeling. This is described by Johnson et al. \cite{johnson2022noaa} and is consistent across all experiments.
+
+\subsubsection{CAMELS US}
+The CAMELS US dataset was used in Case Study 2. It includes meteorological forcings, observed streamflow, and catchment attributes for 671 minimally disturbed basins across the continental U.S. The catchment attributes include topography, climate, land cover, soil, and geology. This dataset has been widely described in the hydrologic literature, and in particular used as a case study for machine learning-based hydrological modeling \cite{Kratzert2018lstm, Kratzert2019pub, feng2022differentiable, Feng2022, frame2022extreme}. Full details are provided by Addor et al. \cite{addor2017camels}, for brevity we'll skip the full description here.
+
+\section{Results}
+\label{sec:results}
+
+\subsection{Case Study 1}
+\label{sec:case1}
+
+Of the nine target variables attempted, our surrogate model was highly successful in predicting six (FIRA, FSA, TRAD, HFX, COSZ, QRAIN) and had low success with two (EDIR and LH)., and was not capable of describing underground runoff into the channel. Table \ref{tab:variable_nse_ranges} shows the target hydrological variables based on their ranges of NSE scores in the validation.
+
+\begin{table}[htbp]
+    \centering
+    \caption{Variables grouped by NSE range}
+    \begin{tabular}{ll}
+        \toprule
+        NSE Range & Variables \\
+        \midrule
+        $0 < $ NSE $< 0.5$ & EDIR, LH \\
+        NSE $> 0.5$ & FIRA, FSA, TRAD, HFX, COSZ, QRAIN \\
+        \bottomrule
+    \end{tabular}
+    \label{tab:variable_nse_ranges}
+\end{table}
+
+\subsubsection{Test State Extrapolation and Per Variable Performance}
+
+This analysis focused on variables with an average NSE greater than zero for all basins during the test period. The variables included COSZ, FIRA, FSA, TRAD, QRAIN, and HFX and we compare model performance with extrapolation with and without the presence of static attributes. As shown in \textbf{Figure~\ref{fig:6panels}}, the model performance for these variables exhibits a negative correlation with the sum of the extrapolation distances (calculated with Quadratic Programming described above), where the distance is measured from the convex hull of the training distribution, and thus represents the degree of data novelty. The Pearson correlation ranged from $r=-0.76$ to $r=-0.13$, with all $p$-values less than 0.05, indicating a statistical significance. To mitigate the clustering of data points near the lower extrapolation values, the sum of the distances is expressed on a logarithmic scale. Each data point in the plots represents a basin, and a degree 2 polynomial trendline was applied to highlight underlying trends.
+
+Furthermore, the strength of this correlation is linked to the model's success in predicting individual variables. In particular, variables with higher predictive skills (as measured by the average NSE) tended to display stronger negative correlations between novelty and performance measures. This relationship is further examined in \textbf{Table~\ref{tab:performance_correlation}}.
+
+\begin{figure}[p] % 'p' places it on a full page of floats
+    \centering
+    % First row (3 panels)
+    \begin{subfigure}[b]{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{important graphs/Hawaii/with_stats/COSZ_NSE_Poly2.png}
+        \caption{COSZ}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{important graphs/Hawaii/with_stats/FIRA_NSE_Poly2.png}
+        \caption{FIRA}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{important graphs/Hawaii/with_stats/FSA_NSE_Poly2.png}
+        \caption{FSA}
+    \end{subfigure}
+
+    \vspace{2em} % spacing between rows
+
+    % Second row (3 panels)
+    \begin{subfigure}[b]{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{important graphs/Hawaii/with_stats/TRAD_NSE_Poly2.png}
+        \caption{TRAD}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{LH_NSE_Poly2.png}
+        \caption{LH}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{important graphs/Hawaii/with_stats/HFX_NSE_Poly2.png}
+        \caption{HFX}
+    \end{subfigure}
+
+    \caption{Six-panel figure showing the relationship between NSE and sum of extrapolation distance for different variables. Each panel is labeled (a)–(f) in order from left to right, top to bottom.}
+    \label{fig:6panels}
+\end{figure}
+
+\begin{table}[h!]
+    \centering
+    \small
+    \begin{tabular}{lcccc}
+        \toprule
+        \textbf{Variable} & \textbf{Avg. NSE (no stat)} & \textbf{Avg. NSE (stat)} & \textbf{$r$ (no stat)} & \textbf{$r$ (stat)} \\
+        \midrule
+        COSZ & 0.98 & 0.99 & -0.76 & -0.65 \\
+        FIRA & 0.84 & 0.85 & -0.74 & -0.13 \\
+        FSA  & 0.91 & 0.98 & -0.69 & -0.64 \\
+        TRAD & 0.76 & 0.80 & -0.54 & -0.24 \\
+        HFX  & 0.68 & 0.88 & -0.29 & -0.46 \\
+        \bottomrule
+    \end{tabular}
+    \caption{Comparison of NSE and Pearson correlation ($r$) between models with and without static attributes.}
+    \label{tab:performance_correlation}
+\end{table}
+
+Table~\ref{tab:performance_correlation} summarizes the results from Figure~\ref{fig:6panels} for the five variables with average NSE greater than 0.5. These results indicate that the negative Pearson correlation between data novelty and model performance becomes stronger as the overall model performance increases. In other words, the extrapolation of test states has the greatest effect on the variables that the model learns most effectively within its training domain. In particular, variables such as COSZ, FSA, and FIRA, which achieved the highest average NSE, displayed the strongest negative correlations. This highlights a critical limitation of the surrogate model: although it can achieve excellent predictive accuracy under familiar conditions, its ability to generalize to novel states is restricted.
+
+However, Table~\ref{tab:performance_correlation} shows an overall improvement in NSE across all variables when static attributes are incorporated. A closer inspection reveals that incorporating static attributes during training reduces the negative correlation between NSE and extrapolation distance, making the model more resilient to novel conditions. This phenomenon is further illustrated in Figure~\ref{fig:6panels}, where the trendlines remain relatively flat for longer extrapolation distances before declining when static attributes are incorporated during training, validation, and testing. Static attributes help the model identify basin-specific characteristics and better adapt or generalize to different conditions.
+
+\subsubsection{Basin-Level Extrapolation and Performance}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=\textwidth]{important graphs/Hawaii/with_stats/average_NSE_Summary_Poly2_EXTR_GE_1.png}
+  \caption{Correlation between extrapolation distance and average NSE for all basins in Case Study 1.}
+  \label{fig:basin_level_hawaii}
+\end{figure}
+
+Figure~\ref{fig:basin_level_hawaii} aggregates the variable-level findings from Table~\ref{tab:performance_correlation} and Figure~\ref{fig:6panels} to the basin scale, illustrating the relationship between extrapolation distance and model performance across all basins in the Hawaiian case study. For each basin, variables with NSE > 0 were identified, and their NSE values were averaged to produce a single performance metric per basin. The sum of extrapolation distances across all variables was calculated for each basin to quantify the overall degree of data novelty.
+Without static attributes, the analysis yielded a strong negative correlation (r = -0.80, p < 0.05) between mean NSE and total extrapolation distance, indicating that basins experiencing greater data novelty consistently exhibited worse model performance. Incorporating static attributes substantially weakened this correlation to r = -0.20 (p < 0.05), representing a 75 \% reduction in correlation magnitude. This reduction can be explained by the flattening of the performance curve when static attributes are included.
+These basin-level results provide important context for understanding the model's generalization capabilities. Even in the relatively homogeneous Hawaiian island system—where basin-to-basin differences are minimal and the model successfully captures a large number of variables—extrapolation still has a detrimental effect on performance without static attributes (r = -0.80). However, incorporating basin-specific static attributes substantially mitigates this effect, enabling the model to maintain more consistent performance across varying degrees of data novelty. 
+
+\subsubsection{Temporal Extrapolation and Model Performance}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.95\textwidth,height=0.70\textheight,keepaspectratio]{with_stat_temporal.png} 
+    \caption{Normalized sum of extrapolation distance per time step against Normalized Rolling Average NSE compare in the context of with and without static attributes included during training.}
+    \label{fig:temporal_hawaii}
+\end{figure}
+
+\textbf{Figure~\ref{fig:temporal_hawaii}} presents the timestep-wise model performance with and without incorporating static attributes during training, visualized using the normalized sum of extrapolation distance and the normalized NSE across all basins. Both metrics were calculated using a rolling window of eight time steps (equivalent to one day). The red line indicates the degree of extrapolation at each time step, representing the unfamiliarity of the model states compared to the training distribution. Consecutive red peaks correspond to extended periods of novel conditions.
+
+Without static attributes, the model exhibited larger-magnitude timestepwise extrapolation distributed across an extended time window. The inclusion of static attributes reduced the extrapolation magnitude and refined it into distinct, sharp peaks—a pattern that corresponds well with the observed NSE decline.
+Given the use of historical data, these extrapolation peaks can be contextualized against documented hydrological events in Hawaii during the test period. Most notably, the pronounced sequence of peaks in mid-November 1996 coincides with the Oahu floods and heavy rainfall events documented by Hawaii.gov. During this period, the normalized NSE experienced its sharpest decline, indicating significant degradation in model performance under extreme conditions. Additional peaks later in the year align with Pacific hurricane activity, further demonstrating the model's sensitivity to extreme weather events.
+
+This close alignment between extrapolation peaks and performance degradation highlights the model's sensitivity to out-of-distribution events and underscores the limitations of generalizing to extreme hydrological scenarios. Furthermore, the addition of static attributes appears to capture basin-specific characteristics that previously influenced extrapolation patterns. This results in lower per-timestep extrapolation values that correspond more precisely with real-world hydrological events.
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.95\textwidth,height=0.45\textheight,keepaspectratio]{important graphs/Hawaii/AbsoluteError.png} 
+    \caption{Absolute Error per timestep vs Distance from the hull center}
+    \label{fig:absolute_error_hawaii}
+\end{figure}
+
+\textbf{Figure~\ref{fig:absolute_error_hawaii}} extends the analysis by comparing the absolute error per timestep against the distance from the geometric center of the convex hull. Unlike boundary-based extrapolation measures, the center-based distance captures the gradual transition from the interpolated to extrapolated test states. The absolute error at each time step was computed as the mean error across all variables, that is, the sum of errors divided by the number of predicted variables. To reduce noise from the large number of data points, a rolling mean with a window size of 50 time steps was applied to highlight the underlying trends.
+
+The results indicate a clear positive relationship between the error magnitude and the distance from the convex hull center. While errors increase steadily with distance in the interpolated states (green), this increase becomes more abrupt once the test states move into the extrapolated states (red). This pattern demonstrates that the model struggles to generalize under out-of-distribution conditions, with the prediction accuracy deteriorating disproportionately as novelty increases.
+
+\subsection{Case Study 2}
+\label{sec:case2}
+
+\subsubsection{Test State Extrapolation and Overall Model Performance}
+
+\begin{figure}[htbp]
+    \centering
+    % \includegraphics[width=0.85\textwidth,height=0.25\textheight,keepaspectratio]{important graphs/Camels/ConvexHull_plot_Colored_by_NSE.png} 
+    \includegraphics[width=0.95\textwidth,
+                 trim=3 0 3 0,
+                 clip]{important graphs/Camels/ConvexHull_plot_Colored_by_NSE.png}
+    \caption{3D projection of internal states space with test states colored by basin NSE performance}
+    \label{fig:convex_hull_nse}
+\end{figure}
+
+\textbf{Figure~\ref{fig:convex_hull_nse}} shows the 3D projection of the internal states space used in this study. The convex hull (brown translucent surface) represents the boundary of the training data distribution, which is constructed from the internal states collected during model training. The blue points correspond to the training data states, which lie mostly within the hull, as expected. The test data points are shown in varying shades of green to gray, representing the NSE scores of the basins for the entire test period, with the color bar indicating performance from low (gray, NSE $\approx$ -10.99) to high (dark green, NSE $\approx$ 0.91).
+
+Several observations emerge from this plot.
+\begin{itemize}
+    \item The convex hull tightly encloses the dense cluster of training states
+    \item Many test points lie outside the hull (extrapolated states), scattered beyond the brown boundary
+    \item For these test states NSE scores vary widely, with some points far outside the hull still achieving moderate to high NSE (dark green)
+    \item Conversely, some points within or near the hull exhibit poor performance (gray to light green)
+\end{itemize}
+
+This pattern demonstrates that the extrapolation distance alone does not fully explain the model accuracy, as some extrapolated states perform well, whereas some interpolated states do not. This motivates the use of scatter plots comparing the extrapolation distance metrics with the NSE to specifically look at this relationship (\textbf{Figure~\ref{fig:four_panel}}).
+
+\begin{figure}[htbp]
+    \centering
+    
+    % Panel a
+    \begin{subfigure}[b]{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{important graphs/Camels/NSE_vs_sum_distance_convex_hull.png}
+%        \caption{Sum of extrapolation distance from convex hull for extrapolated states only}
+        \label{fig:panel_a}
+    \end{subfigure}
+    \hfill
+    % Panel b
+    \begin{subfigure}[b]{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{important graphs/Camels/NSE_vs_sum_distance_hull_center.png}
+%        \caption{Sum distance from geometric hull center for all test states}
+        \label{fig:panel_b}
+    \end{subfigure}
+    \vspace{0.5cm} % space between rows
+    % Panel c
+    \begin{subfigure}[b]{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{important graphs/Camels/NSE_vs_sum_mahalanobis_distance_extrapolated.png}
+ %       \caption{Sum of Mahalanobis distance for extrapolated test states only}
+        \label{fig:panel_c}
+    \end{subfigure}
+    % Panel d
+    \hfill
+    \begin{subfigure}[b]{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{important graphs/Camels/NSE_vs_sum_mahalanobis_distance.png}
+%        \caption{Sum of Mahalanobis distance for all test states}
+        \label{fig:panel_d}
+    \end{subfigure}
+    \hfill
+    
+    \caption{Relationship between extrapolation distance and model performance (NSE) across test basins.}
+    \label{fig:four_panel}
+\end{figure}
+
+\textbf{Figure~\ref{fig:four_panel}} presents four scatter plots that consistently show a weak to moderate negative correlation between extrapolation distance and model performance. Specifically, as the distance from the training data distribution increases, the Nash-Sutcliffe efficiency (NSE) tends to decrease. This trend was observed across all four plots, with weak to moderate Pearson correlation coefficients ranging from -0.20 to -0.40. Each point represents one of the 507 basins from the CAMELS-US dataset with a positive NSE. Basins with negative NSE values were excluded from this analysis because their model predictions were considered unreliable. A logarithmic scale was applied to the x-axis for each distance metric to better visualize the distribution, as most basins exhibited relatively low extrapolation distances.
+
+The four plots utilize two primary types of distance metrics to quantify novelty: Euclidean and Mahalanobis.
+\begin{itemize}
+    \item \textbf{Euclidean vs. Mahalanobis Distance}: Plots \textbf{(a) and (b)} use a Euclidean-based distance, while panels \textbf{(c) and (d)} use the Mahalanobis distance, which accounts for the statistical variance of the training data.
+    \item \textbf{Extrapolated States vs. All States}: Plots \textbf{(a) and (c)} focus exclusively on \textbf{extrapolated test states} to compute distances, which more directly measures a basin's separation from the training data. In contrast, panels \textbf{(b) and (d)} consider \textbf{all states} of a basin when calculating distance metrics.
+\end{itemize}
+
+While the correlations are generally weak to moderate, a subtle pattern emerges: the negative correlation is slightly stronger when the distance metrics are calculated using only extrapolated states.
+\begin{itemize}
+    \item For \textbf{Euclidean distance}, the correlation for extrapolated states (-0.31 in plot a) is stronger than for all states (-0.22 in plot c).
+    \item For \textbf{Mahalanobis distance}, the correlation for extrapolated states (-0.39 in plot d) is also stronger than for all states (-0.34 in plot b).
+\end{itemize}
+
+This supports the notion that extrapolation plays a role in the degradation of model performance, but its effect is subtle. The weak to moderate correlation values across all four metrics indicate that extrapolation is not the sole factor determining a basin's NSE or model performance. Instead, it is one of several contributing factors, and its influence is limited to this specific case.
+
+\subsubsection{Test State Extrapolation in the Context of Basin Uniqueness}
+
+\begin{figure}[htbp]
+    \centering
+    \includegraphics[width=0.95\textwidth, trim=4 0 4 0,
+                 clip]{important graphs/Camels/Distinct_colors_per basin.png} 
+    \caption{Test states colored distinctly by basin of origin}
+    \label{fig:basin_colors}
+\end{figure}
+
+Figure~\ref{fig:basin_colors} shows a 3D representation of the model's latent space, where each test state is colored according to its basin of origin. Each of the 340 test basins was assigned a distinct color. A key observation from this visualization is that states belonging to the same basin tend to cluster together within the latent space—a behavior that emerges only when static attributes are incorporated during model training and testing. This clustering is particularly evident in states located outside the convex hull of the training data, suggesting that the model learns to organize its internal representations based on basin-specific characteristics. For certain basins, all their states lie outside the convex hull, indicating that the model has never encountered conditions analogous to these basins during training. These basins therefore represent a unique form of extrapolation—not just temporal or climatic extrapolation, but basin-level extrapolation where the model must generalize to entirely novel geographic contexts. Understanding how the model performs on these "unique" basins compared to basins with some representation in the training data provides critical insight into the limits of the surrogate model's generalization capabilities. This spatial awareness conferred by static attributes helps explain the relatively weak correlations observed in Figure~\ref{fig:basin_level_hawaii} when static attributes are included (r = -0.20 versus r = -0.80 without). By encoding basin-specific characteristics in the latent space, static attributes enable the model to adapt its predictions based on geographic context, thereby maintaining more consistent performance even when encountering novel hydroclimatic conditions. The following section further investigates this relationship by comparing performance across basins with varying degrees of uniqueness.
+
+\begin{figure}[htbp]
+    \centering
+    \begin{subfigure}{0.95\textwidth}
+        \includegraphics[width=\linewidth,height=0.23\textheight]{important graphs/Camels/basin_12013500_trends_QObs_mm_d_.png}
+        \caption{}
+        \label{fig:basin_a}
+    \end{subfigure}
+    \vspace{0.1cm}
+
+    \begin{subfigure}{0.95\textwidth}
+        \includegraphics[width=\linewidth,height=0.23\textheight]{important graphs/Camels/basin_06409000_trends_QObs_mm_d_.png}
+        \caption{}
+        \label{fig:basin_b}
+    \end{subfigure}
+    \vspace{0.1cm}
+
+    \begin{subfigure}{0.95\textwidth}
+        \includegraphics[width=\linewidth,height=0.23\textheight]{important graphs/Camels/basin_06452000_trends_QObs_mm_d_.png}
+        \caption{}
+        \label{fig:basin_c}
+    \end{subfigure}
+    \vspace{0.1cm}
+
+    \begin{subfigure}{0.95\textwidth}
+        \includegraphics[width=\linewidth,height=0.23\textheight]{important graphs/Camels/combined_trends_all_basins_by_date_QObs_mm_d_.png}
+        \caption{}
+        \label{fig:basin_d}
+    \end{subfigure}
+
+    \caption{Comparison of NNSE and Mahalanobis distance for selected basins over time. 
+    (a) Basin 12013500, (b) Basin 06409000, (c) Basin 06452000, (d) Combined trends across all basins.}
+    \label{fig:basin_comparison}
+\end{figure}
+
+
+\textbf{Figure~\ref{fig:basin_comparison}} illustrates the dynamic relationship between a model's performance and statistical novelty over time for three representative basins. The plots show the \textbf{Normalized Nash-Sutcliffe Efficiency (NNSE)} against the \textbf{normalized Mahalanobis distance} for each basin's test period (01/01/1980 to 31/12/1989). The Mahalanobis distance serves as a metric for statistical novelty, quantifying a state's deviation from the training data distribution. The NNSE was calculated using a 7-day rolling window for plots (a), (b), and (c) and a 30-day rolling window for plot (d) to smooth the time series.
+
+\begin{itemize}
+    \item \textbf{Best-Performing Basin (12013500 Willapa River near Willapa, Washington) (a):} This basin exhibits an overall NSE of 0.88, which is a sign of strong model performance. The plot shows consistently high peaks in the NNSE, corresponding to low normalized Mahalanobis distances. This suggests that the model performs well for basins that are not statistically novel. The peaks are surprising, however, as the rolling NNSE score consistently spikes in January, which is in the middle of the high-flow season on this river. 
+    \item \textbf{Worst-Performing Basin (06409000 Castle Creek above Deerfield Reservoir near Hill City, South Dakota) (b):} In stark contrast, this basin has a very poor overall NSE of -34.2. The NNSE peaks were small and infrequent, indicating poor model performance. Notably, the Mahalanobis distance for this basin was also low, which challenges the idea that low novelty guarantees good performance.
+    \item \textbf{Unique Extrapolated Basin (06452000 White River in South Dakota) (c):} This is the unique deep red colored basin identified in Figure~\ref{fig:basin_colors} as having a high Mahalanobis distance. This plot confirms its novelty, with consistently high Mahalanobis distances throughout the test period. Despite its uniqueness, the model performed moderately, achieving an overall NSE of -0.60 with a moderate number of NNSE peaks.
+\end{itemize}
+
+\textbf{Figure~\ref{fig:basin_comparison}(d)} provides a comparative overview of the NNSE and Mahalanobis distances for all three basins using a 30-day rolling window. This comparison revealed that while the best- and worst-performing basins have similar low Mahalanobis distances, their NNSE values are drastically different. This finding suggests that the novelty of a basin is not the only factor affecting model performance. The moderate performance in the unique, highly extrapolated basin further supports this conclusion. The model's ability to achieve a relatively better performance on a highly unique basin compared to a low-novelty basin indicates that the model can adapt to basin uniqueness.
+
+\section{Conclusion}
+In the Hawaii case study, the model showed a consistent pattern in which the performance declined as the extrapolation increased. This effect was strongest for the variables that the model predicted most accurately under normal conditions and was more pronounced during extreme events. Across basins and time steps, higher extrapolation distances were associated with larger prediction errors, indicating that the model had difficulty generalizing to novel conditions, even within a relatively homogeneous region.
+
+In the CAMELS-CONUS case study, extrapolation also had a negative effect on model performance, but the relationship was weaker and more variable. Some basins that were clearly extrapolated performed reasonably well, whereas others that were similar to the training data performed poorly. These results suggest that basin uniqueness does not fully determine performance outcomes and that additional factors, such as data quality, model structure, or local hydrological characteristics, may influence the results.
+
+\paragraph{Resolving our Hypotheses.} Neither event-based extrapolation, basin uniqueness (extrapolation of basin characteristics), or a combination of the two can reliably indicate a model's poor performance. Together, the two case studies indicate that event-based extrapolation is a more consistent source of model degradation than basin-based extrapolation. In Case Study 1, the results showed \textbf{statistically significant negative correlations between extrapolation distance and performance}, particularly for the best-predicted variables (e.g., COSZ, FIRA, and FSA), with Pearson r values as low as -0.76 and clear degradation during known extreme hydrologic events such as the 1996 Oahu floods. Temporal analysis further confirmed that performance decline aligned with periods of extreme conditions, and errors increased sharply beyond the convex hull boundary. In contrast, Case Study 2 revealed only weak to moderate negative correlations between the extrapolation distance and NSE (ranging from -0.20 to -0.40), and several basins with high novelty performed moderately well. Notably, a highly extrapolated basin (White River, SD) achieved better performance than a low-novelty basin, suggesting that the model can sometimes adapt to basin-specific conditions. These patterns show that, while event novelty systematically undermines model performance, basin uniqueness does not.
+
+We investigated how LSTM internal representations behave under novel conditions using convex hull–based extrapolation analysis across two distinct case studies. In the controlled Hawaii based synthetic experiment, extrapolation distance showed a strong negative correlation with model performance $(\mathbf{r = -0.80})$, indicating that when latent states moved outside familiar regions of the training distribution, prediction accuracy deteriorated sharply. Incorporating static attributes during training weakened this relationship $(\mathbf{r = -0.20})$ while improving overall NSE values, suggesting that perhaps these attributes fundamentally change how the model organizes and interprets novelty. The broader CAMELS analysis reinforced this idea. Correlations between extrapolation and performance were weaker $(\mathbf{r = -0.40})$ and $(\mathbf{r = -0.20})$, and latent states grouped by basin identity once static attributes were included, forming clusters even when geometrically distant from training data. 
+
+\section{Discussion}
+
+Several recent studies  \cite{Lees2021}\cite{Kratzert2019pub}\cite{Kratzert2019universal} have shown that the internal states of LSTM models encode meaningful hydrologic information, providing insight into how these networks learn temporal and spatial dependencies. Our work extends these insights by directly linking latent-state extrapolation to model performance under out-of-distribution conditions, building on the argument of \cite{balestriero2021learning} that in high-dimensional spaces, most predictions are inherently extrapolations. By viewing hydrologic prediction through this lens, we demonstrate that generalization and extrapolation are not mutually exclusive. LSTMs can generalize well even when operating outside the geometric bounds of the training data. Rather than merely enhancing predictions, static attributes restructure the latent space, encoding basin identity and providing contextual guidance that allows the model to maintain stability even under unseen conditions, as reflected in the clustering of basins observed in the CAMELS model. Some basins that were highly extrapolated, such as White River, achieved moderate success, while others well within the training distribution, like Castle Creek, failed catastrophically. This paradox could imply that static attributes do not prevent extrapolation, but instead help the model recognize where it is extrapolating from, aligning its behavior with each basin’s physical context. Temporal analysis further revealed that once basin uniqueness was encoded, remaining extrapolation signals corresponded to hydrologically extreme events, implying that effects of spatial novelty can be mitigated through static conditioning, whereas event novelty remains a dominant source of model performance degradation.
+
+
+Keith Beven \cite{Beven2000} emphasized that each hydrologic measurement possesses a form of uniqueness tied to its location and conditions—an idea consistent with our finding that extrapolation is a combination of basin uniqueness and event uniqueness. Beven further suggested that effective models of hydrologic heterogeneity must incorporate parameters specific to individual sites. Our results empirically support this claim: incorporating static attributes improves model behavior under out-of-distribution scenarios by embedding regional information that guides the model’s internal representations, even if overall NSE gains remain modest. This effect is visible in the organization of LSTM cell states according to regional similarity, reflecting how static attributes act as contextual anchors in latent space.
+Contrary to our findings, \cite{Heudorfer2025} reported that static attributes contributed little to model performance, suggesting that improvements are largely driven by meteorological inputs. Our analysis provides the complementary perspective that although static attributes may not substantially increase aggregate skill metrics, they help stabilize the model’s behavior under extrapolated conditions. In other words, static features enhance structural generalization rather than direct predictive accuracy, allowing the model to remain consistent when exposed to unseen basin characteristics.
+
+These results suggest that static attributes qualify as a reasonable solution for mitigating performance degradation due to basin-level extrapolation. By embedding regional information into the latent space, they allow the model to recognize and adapt to basin-specific contexts, effectively addressing the implications of basin uniqueness. This interpretation resonates with Beven’s \cite{Beven2020dl}discussion of the “uniqueness of place,” where he notes that pre-trained regional LSTM models, when refined using limited local data, can outperform models trained solely on individual basins. As Beven highlights, even within deep learning frameworks, such approaches acknowledge that hydrologic behavior retains local specificity despite being informed by broader regional patterns.
+
+Several studies have also examined the limitations of LSTMs in representing hydrologic extremes. Baste et al. \cite{baste2025unveiling} described theoretical limits of LSTM discharge prediction, showing that gating mechanisms can suppress the propagation of large signals during extreme forcing. In the same paper, it is mentioned that LSTM responses to hydrologic events typically persist for three or more days—consistent with our temporal analysis, which shows extrapolation peaks primarily during long-duration events such as floods and hurricanes. Similarly, Song et al.\cite{song2025physicsinformed} and Acuña et al. \cite{acuna2024analyzing} demonstrated that physics-informed extensions of LSTMs can modestly improve peak-flow modeling but still struggle under extreme conditions.
+
+Overall, our results suggest that in the current state of hydrologic modeling, static attributes offer a practical and interpretable mechanism for mitigating extrapolation effects stemming from basin uniqueness. However, event uniqueness remains unresolved. Future work should therefore focus on physics-informed neural architectures that explicitly encode process-based constraints, offering a path toward models that are robust to both spatial and temporal forms of novelty.
+
+\section*{Acknowledgments}
+This research was supported by the Cooperative Institute for Research to Operations in Hydrology (CIROH) with funding under award NA22NWS4320003 from the NOAA Cooperative Institute Program. The statements, findings, conclusions, and recommendations are those of the author(s) and do not necessarily reflect the opinions of NOAA.
+
+\section{Open code and data}
+All the code for this analysis is available here: \url{https://github.com/DualEarth/convex_hydrology}. All data for this is available through NOAA's National Water Model: \url{s3://noaa-nwm-retrospective-3-0-pds/Hawaii/} \cite{cosgrove2024noaa} and NCAR CAMELS: \url{https://ral.ucar.edu/solutions/products/camels} \cite{addor2017camels}.
+
+%Bibliography
+\bibliographystyle{unsrt}  
+\bibliography{references}  
+
+
+\end{document}
+ 
